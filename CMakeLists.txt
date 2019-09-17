@@ -20,6 +20,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(parameter_server_interfaces REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 add_library(robot_hardware SHARED src/robot_hardware.cpp)
 target_include_directories(robot_hardware PUBLIC include)
@@ -28,6 +30,8 @@ ament_target_dependencies(
   rclcpp
   hardware_interface
   parameter_server_interfaces
+  std_msgs
+  sensor_msgs
 )
 install(
   TARGETS robot_hardware
