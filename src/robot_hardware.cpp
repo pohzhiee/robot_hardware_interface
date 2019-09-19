@@ -16,9 +16,10 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::init()
     // Register all the handles
     register_joint_handles();
     // Create the subscription to joint states
-    subscriber_node_ = std::make_shared<rclcpp::Node>("robot_subscriber_node");
-    auto sub = subscriber_node_->create_subscription<sensor_msgs::msg::JointState>("/joint_states", rclcpp::SensorDataQoS(),
+    // subscriber_node_ = std::make_shared<rclcpp::Node>("robot_subscriber_node");
+    subscription_ = node_->create_subscription<sensor_msgs::msg::JointState>("/joint_states", rclcpp::SensorDataQoS(),
                                                                         std::bind(&MyRobotHardware::joint_state_subscription_callback, this, std::placeholders::_1));
+    
     // Create the command publishers
     create_cmd_pubs(robotName);
     // auto fp = [](rclcpp::Node::SharedPtr node) {
@@ -29,9 +30,9 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::init()
     // std::thread(fp, subscriber_node_).detach();
     // fp(node_);
     // executor_->spin();
-    executor_->add_node(subscriber_node_);
-    executor_->spin();
-    // future_handle_ = std::async(std::launch::async,[](std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exe) { exe->spin(); } , executor_);
+    executor_->add_node(node_);
+    // executor_->spin();
+    future_handle_ = std::async(std::launch::async,[](std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exe) { exe->spin(); } , executor_);
     // TODO: URGENT EMERGENCY FIX THIS PIECE OF SHIT
     // WHAT THE FUCK I LAUNCHED IT ASYNC AND IT'S BLOCKING!?!?!!?!
     return 0;
@@ -91,7 +92,7 @@ void MyRobotHardware::register_joint_handles()
         }
         else
         {
-            RCLCPP_DEBUG(node_->get_logger(), "Registered joint_state_handle for %s", joint_names_[i]);
+            RCLCPP_INFO(node_->get_logger(), "Registered joint_state_handle for %s, %u", joint_names_[i].c_str(), i);
         }
         hardware_interface::JointCommandHandle command_handle(joint_names_[i], &(cmd_[i]));
         joint_command_handles_[i] = command_handle;
@@ -102,7 +103,7 @@ void MyRobotHardware::register_joint_handles()
         }
         else
         {
-            RCLCPP_DEBUG(node_->get_logger(), "Registered joint_command_handle for %s", joint_names_[i]);
+            // RCLCPP_INFO(node_->get_logger(), "Registered joint_command_handle for %s, %u", joint_names_[i].c_str(), i);
         }
     }
 }
@@ -114,21 +115,29 @@ void MyRobotHardware::initialise_vectors()
     joint_state_handles_.resize(length);
     joint_command_handles_ = std::vector<hardware_interface::JointCommandHandle>();
     joint_command_handles_.resize(length);
-    // pos_ = std::vector<std::atomic<double>>();
-    // pos_.resize(length);
-    // vel_ = std::vector<std::atomic<double>>();
-    // vel_.resize(length);
-    // eff_ = std::vector<std::atomic<double>>();
-    // eff_.resize(length);
-    // cmd_ = std::vector<std::atomic<double>>();
-    // cmd_.resize(length);
+    pos_ = std::vector<double>();
+    pos_.resize(length);
+    vel_ = std::vector<double>();
+    vel_.resize(length);
+    eff_ = std::vector<double>();
+    eff_.resize(length);
+    cmd_ = std::vector<double>();
+    cmd_.resize(length);
 }
 
 void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointState::UniquePtr msg)
 {
     // Update position states
-    RCLCPP_INFO(node_->get_logger(), "Subscriber function called");
+    // RCLCPP_INFO(node_->get_logger(), "Subscriber function called");
     {
+/*         for(auto &joint_name : msg->name){
+            for(size_t i = 0;i<joint_state_handles_.size();i++){
+                auto  &handle = joint_state_handles_[i];
+                if(handle.get_name().compare(joint_name) == 0){
+                    pos_[i] = msg->position[i];
+                }
+            }
+        } */
         auto pos_size = msg->position.size();
         auto pos_min_size = std::min(pos_size, pos_.size());
         if (pos_size > pos_.size())
@@ -210,6 +219,11 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::read()
 hardware_interface::hardware_interface_ret_t MyRobotHardware::write()
 {
     // RCLCPP_INFO(node_->get_logger(), "Write called");
+    for(size_t i = 0;i<joint_names_.size();i++){
+        auto msg = std_msgs::msg::Float64();
+        msg.data = cmd_[i];
+        publishers_[i]->publish(msg);
+    }
     return 0;
 }
 

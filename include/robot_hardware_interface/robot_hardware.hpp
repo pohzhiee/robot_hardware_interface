@@ -35,14 +35,14 @@ protected:
     std::vector<hardware_interface::JointStateHandle> joint_state_handles_;
     std::vector<hardware_interface::JointCommandHandle> joint_command_handles_;
 
-    // std::vector<double> pos_;
-    // std::vector<double> vel_;
-    // std::vector<double> eff_;
-    // std::vector<double> cmd_;
-    std::array<double, 16> pos_;
-    std::array<double, 16> vel_;
-    std::array<double, 16> eff_;
-    std::array<double, 16> cmd_;
+    std::vector<double> pos_;
+    std::vector<double> vel_;
+    std::vector<double> eff_;
+    std::vector<double> cmd_;
+    // std::array<double, 16> pos_;
+    // std::array<double, 16> vel_;
+    // std::array<double, 16> eff_;
+    // std::array<double, 16> cmd_;
 
     int32_t prev_update_sec;
     uint32_t prev_update_nsec;
@@ -53,9 +53,10 @@ protected:
     std::vector<std::string> joint_names_;
 
     std::vector<rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr> publishers_;
-    std::vector<rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr> subscriptions_;
+    // std::vector<rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr> subscriptions_;
     rclcpp::Node::SharedPtr node_, subscriber_node_;
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr subscription_;
 private:
     std::vector<std::string> get_joint_names(std::string &robot_name);
     void register_joint_handles();
