@@ -8,6 +8,7 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::init()
 {
     node_ = std::make_shared<rclcpp::Node>("robot_node");
     executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
+    // TODO: fix the robot name hardcoding
     std::string robotName = "lobot";
     // Get all the joint names Hardware the robot
     joint_names_ = get_joint_names(robotName);
@@ -16,25 +17,14 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::init()
     // Register all the handles
     register_joint_handles();
     // Create the subscription to joint states
-    // subscriber_node_ = std::make_shared<rclcpp::Node>("robot_subscriber_node");
-    subscription_ = node_->create_subscription<sensor_msgs::msg::JointState>("/joint_states", rclcpp::SensorDataQoS(),
-                                                                        std::bind(&MyRobotHardware::joint_state_subscription_callback, this, std::placeholders::_1));
+    subscription_ = node_->create_subscription<sensor_msgs::msg::JointState>(
+        "/joint_states", rclcpp::SensorDataQoS(), std::bind(&MyRobotHardware::joint_state_subscription_callback, this, std::placeholders::_1));
     
-    // Create the command publishers
-    create_cmd_pubs(robotName);
-    // auto fp = [](rclcpp::Node::SharedPtr node) {
-    //     auto executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
-    //     executor->add_node(node);
-    //     executor->spin(); 
-    //     };
-    // std::thread(fp, subscriber_node_).detach();
-    // fp(node_);
-    // executor_->spin();
+    cmd_publisher_ = node_->create_publisher<ros2_control_interfaces::msg::JointCommands>("/" + robotName + "/sim/cmd", rclcpp::SensorDataQoS());
+
     executor_->add_node(node_);
-    // executor_->spin();
     future_handle_ = std::async(std::launch::async,[](std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exe) { exe->spin(); } , executor_);
-    // TODO: URGENT EMERGENCY FIX THIS PIECE OF SHIT
-    // WHAT THE FUCK I LAUNCHED IT ASYNC AND IT'S BLOCKING!?!?!!?!
+
     return 0;
 } // namespace robot_hw_interface
 
@@ -128,16 +118,7 @@ void MyRobotHardware::initialise_vectors()
 void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointState::UniquePtr msg)
 {
     // Update position states
-    // RCLCPP_INFO(node_->get_logger(), "Subscriber function called");
     {
-/*         for(auto &joint_name : msg->name){
-            for(size_t i = 0;i<joint_state_handles_.size();i++){
-                auto  &handle = joint_state_handles_[i];
-                if(handle.get_name().compare(joint_name) == 0){
-                    pos_[i] = msg->position[i];
-                }
-            }
-        } */
         auto pos_size = msg->position.size();
         auto pos_min_size = std::min(pos_size, pos_.size());
         if (pos_size > pos_.size())
@@ -199,20 +180,9 @@ void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointS
     }
 }
 
-void MyRobotHardware::create_cmd_pubs(std::string &robot_name)
-{
-    for (size_t i = 0; i < joint_names_.size(); i++)
-    {
-        auto topicName = "/" + robot_name + "/" + joint_names_[i] + "/cmd";
-        auto pub = node_->create_publisher<std_msgs::msg::Float64>(topicName, rclcpp::SensorDataQoS());
-        publishers_.push_back(pub);
-    }
-}
-
 hardware_interface::hardware_interface_ret_t MyRobotHardware::read()
 {
-    // RCLCPP_INFO(this->node_->get_logger(), "Pos 0 : %f", (double)(pos_[0]));
-    // RCLCPP_INFO(node_->get_logger(), "Read called");
+    // Currently does nothing because the joint state subscription writes directly to the buffer that is supposed to be read by the controllers
     return 0;
 }
 
@@ -220,9 +190,10 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::write()
 {
     // RCLCPP_INFO(node_->get_logger(), "Write called");
     for(size_t i = 0;i<joint_names_.size();i++){
-        auto msg = std_msgs::msg::Float64();
-        msg.data = cmd_[i];
-        publishers_[i]->publish(msg);
+        auto msg = ros2_control_interfaces::msg::JointCommands();
+        msg.commands = cmd_;
+        msg.joint_names = joint_names_;
+        cmd_publisher_->publish(msg);
     }
     return 0;
 }

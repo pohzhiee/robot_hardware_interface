@@ -22,6 +22,7 @@ find_package(hardware_interface REQUIRED)
 find_package(parameter_server_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(ros2_control_interfaces REQUIRED)
 
 add_library(robot_hardware SHARED src/robot_hardware.cpp)
 target_include_directories(robot_hardware PUBLIC include)
@@ -32,6 +33,7 @@ ament_target_dependencies(
   parameter_server_interfaces
   std_msgs
   sensor_msgs
+  ros2_control_interfaces
 )
 install(
   TARGETS robot_hardware

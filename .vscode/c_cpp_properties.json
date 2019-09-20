@@ -6,6 +6,7 @@
                 "${workspaceFolder}/include",
                 "${workspaceFolder}/../../install/hardware_interface/include",
                 "${workspaceFolder}/../../install/parameter_server_interfaces/include",
+                "${workspaceFolder}/../../install/ros2_control_interfaces/include",
                 "/opt/ros/dashing/include"
             ],
             "intelliSenseMode": "gcc-x64",

@@ -9,6 +9,7 @@
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <ros2_control_interfaces/msg/joint_commands.hpp>
 #include <vector>
 #include <string>
 
@@ -39,10 +40,6 @@ protected:
     std::vector<double> vel_;
     std::vector<double> eff_;
     std::vector<double> cmd_;
-    // std::array<double, 16> pos_;
-    // std::array<double, 16> vel_;
-    // std::array<double, 16> eff_;
-    // std::array<double, 16> cmd_;
 
     int32_t prev_update_sec;
     uint32_t prev_update_nsec;
@@ -52,7 +49,7 @@ protected:
     unsigned int num_joints;
     std::vector<std::string> joint_names_;
 
-    std::vector<rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr> publishers_;
+    rclcpp::Publisher<ros2_control_interfaces::msg::JointCommands>::SharedPtr cmd_publisher_;
     // std::vector<rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr> subscriptions_;
     rclcpp::Node::SharedPtr node_, subscriber_node_;
     rclcpp::executors::MultiThreadedExecutor::SharedPtr executor_;
