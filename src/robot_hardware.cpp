@@ -1,4 +1,4 @@
-#include "robot_hardware_interface/robot_hardware.hpp"
+#include "ros2_control_robot/robot_hardware.hpp"
 #include "parameter_server_interfaces/srv/get_all_joints.hpp"
 #include <chrono>
 namespace robot_hw_interface
@@ -33,39 +33,42 @@ std::vector<std::string> MyRobotHardware::get_joint_names(std::string &robot_nam
     using getAllJoints = parameter_server_interfaces::srv::GetAllJoints;
     auto client = node_->create_client<getAllJoints>("/GetAllControlJoints");
     auto joint_names = std::vector<std::string>();
-    client->wait_for_service(1s);
-    if (client->service_is_ready())
-    {
-        auto req = std::make_shared<parameter_server_interfaces::srv::GetAllJoints::Request>();
-        req->robot = robot_name;
-        auto resp = client->async_send_request(req);
-        RCLCPP_INFO(node_->get_logger(), "(MyRobotHardware) Sending async request...");
-        auto spin_status = rclcpp::executors::spin_node_until_future_complete(*executor_, node_, resp, 5s);
-        if (spin_status == rclcpp::executor::FutureReturnCode::SUCCESS)
+    auto retryCount = 0;
+    while(retryCount < 8){
+        client->wait_for_service(1s);
+        if (client->service_is_ready())
         {
-            auto status = resp.wait_for(1s);
-            if (status == std::future_status::ready)
+            auto req = std::make_shared<parameter_server_interfaces::srv::GetAllJoints::Request>();
+            req->robot = robot_name;
+            auto resp = client->async_send_request(req);
+            RCLCPP_INFO(node_->get_logger(), "(MyRobotHardware) Sending async request...");
+            auto spin_status = rclcpp::executors::spin_node_until_future_complete(*executor_, node_, resp, 5s);
+            if (spin_status == rclcpp::executor::FutureReturnCode::SUCCESS)
             {
-                auto res = resp.get();
-                joint_names = res->joints;
-                /*                 for (auto &j : res->joints)
+                auto status = resp.wait_for(1s);
+                if (status == std::future_status::ready)
                 {
-                    RCLCPP_INFO(node_->get_logger(), "Joint: %s", j.c_str());
-                } */
+                    auto res = resp.get();
+                    joint_names = res->joints;
+                    return joint_names;
+                }
+                else
+                {
+                    RCLCPP_ERROR(node_->get_logger(), "GetAllJoints service failed to execute");
+                    retryCount++;
+                }
             }
             else
             {
-                RCLCPP_ERROR(node_->get_logger(), "GetAllJoints service failed to execute");
+                RCLCPP_ERROR(node_->get_logger(), "GetAllJoints service failed to execute (spin failed)");
+                retryCount++;
             }
         }
         else
         {
-            RCLCPP_ERROR(node_->get_logger(), "GetAllJoints service failed to execute (spin failed)");
+            RCLCPP_ERROR(node_->get_logger(), "GetAllJoints service failed to start, check that parameter server is launched");
+            retryCount++;
         }
-    }
-    else
-    {
-        RCLCPP_ERROR(node_->get_logger(), "GetAllJoints service failed to start, check that parameter server is launched");
     }
     return joint_names;
 }
@@ -131,7 +134,13 @@ void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointS
         }
         for (size_t i = 0; i < pos_min_size; i++)
         {
-            pos_[i] = msg->position[i];
+            for(size_t j = 0;j<msg->name.size();j++){
+                auto match = joint_state_handles_[i].get_name().compare(msg->name[j])==0;
+                if(match){
+                    pos_[i] = msg->position[j];
+                    break;
+                }
+            }
         }
         // RCLCPP_INFO(node_->get_logger(), "Pos 0 set to: %f", (double)(pos_[0]));
     }
@@ -149,10 +158,16 @@ void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointS
         }
         for (size_t i = 0; i < vel_min_size; i++)
         {
-            vel_[i] = (msg->velocity[i]);
+            for(size_t j = 0;j<msg->name.size();j++){
+                auto match = joint_state_handles_[i].get_name().compare(msg->name[j])==0;
+                if(match){
+                    vel_[i] = msg->velocity[j];
+                    break;
+                }
+            }
         }
     }
-    // Update effort states
+/*     // Update effort states
     {
         auto eff_size = msg->effort.size();
         auto eff_min_size = std::min(eff_size, pos_.size());
@@ -177,7 +192,7 @@ void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointS
 
         prev_update_nsec = msg->header.stamp.nanosec;
         prev_update_sec = msg->header.stamp.sec;
-    }
+    } */
 }
 
 hardware_interface::hardware_interface_ret_t MyRobotHardware::read()
@@ -189,12 +204,15 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::read()
 hardware_interface::hardware_interface_ret_t MyRobotHardware::write()
 {
     // RCLCPP_INFO(node_->get_logger(), "Write called");
-    for(size_t i = 0;i<joint_names_.size();i++){
-        auto msg = ros2_control_interfaces::msg::JointCommands();
-        msg.commands = cmd_;
-        msg.joint_names = joint_names_;
-        cmd_publisher_->publish(msg);
+    // for(size_t i = 0;i<joint_names_.size();i++){
+    auto msg = ros2_control_interfaces::msg::JointCommands();
+    for(auto &cmd : joint_command_handles_){
+        msg.joint_names.push_back(cmd.get_name());
+        msg.commands.push_back(cmd.get_cmd());
     }
+    cmd_publisher_->publish(msg);
+        // RCLCPP_INFO(node_->get_logger(), "Publishing msg...");
+    // }
     return 0;
 }
 

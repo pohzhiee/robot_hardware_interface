@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(robot_hardware_interface)
+project(ros2_control_robot)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -59,6 +59,14 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_export_dependencies(
+  rclcpp_lifecycle
+  sensor_msgs
+  std_msgs
+  hardware_interface
+  parameter_server_interfaces
+  ros2_control_interfaces
+)
 ament_export_include_directories(
   include
 )
