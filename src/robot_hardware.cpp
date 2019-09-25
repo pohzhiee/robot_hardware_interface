@@ -19,11 +19,11 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::init()
     // Create the subscription to joint states
     subscription_ = node_->create_subscription<sensor_msgs::msg::JointState>(
         "/joint_states", rclcpp::SensorDataQoS(), std::bind(&MyRobotHardware::joint_state_subscription_callback, this, std::placeholders::_1));
-    
+
     cmd_publisher_ = node_->create_publisher<ros2_control_interfaces::msg::JointCommands>("/" + robotName + "/sim/cmd", rclcpp::SensorDataQoS());
 
     executor_->add_node(node_);
-    future_handle_ = std::async(std::launch::async,[](std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exe) { exe->spin(); } , executor_);
+    future_handle_ = std::async(std::launch::async, [](std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> exe) { exe->spin(); }, executor_);
 
     return 0;
 } // namespace robot_hw_interface
@@ -34,7 +34,8 @@ std::vector<std::string> MyRobotHardware::get_joint_names(std::string &robot_nam
     auto client = node_->create_client<getAllJoints>("/GetAllControlJoints");
     auto joint_names = std::vector<std::string>();
     auto retryCount = 0;
-    while(retryCount < 8){
+    while (retryCount < 20)
+    {
         client->wait_for_service(1s);
         if (client->service_is_ready())
         {
@@ -42,7 +43,7 @@ std::vector<std::string> MyRobotHardware::get_joint_names(std::string &robot_nam
             req->robot = robot_name;
             auto resp = client->async_send_request(req);
             RCLCPP_INFO(node_->get_logger(), "(MyRobotHardware) Sending async request...");
-            auto spin_status = rclcpp::executors::spin_node_until_future_complete(*executor_, node_, resp, 5s);
+            auto spin_status = rclcpp::executors::spin_node_until_future_complete(*executor_, node_, resp, 1s);
             if (spin_status == rclcpp::executor::FutureReturnCode::SUCCESS)
             {
                 auto status = resp.wait_for(1s);
@@ -120,6 +121,11 @@ void MyRobotHardware::initialise_vectors()
 
 void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointState::UniquePtr msg)
 {
+
+    // The reason this works without checking for joint name is because the order of joint names which the parameter server responds with
+    // is the exact same for both this and the joint state plugin. As such, the order of registration will be the same, which leads to
+    // the order of data to be the same.
+
     // Update position states
     {
         auto pos_size = msg->position.size();
@@ -134,13 +140,13 @@ void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointS
         }
         for (size_t i = 0; i < pos_min_size; i++)
         {
-            for(size_t j = 0;j<msg->name.size();j++){
+            pos_[i] = msg->position[i];
+            /*             for(size_t j = 0;j<msg->name.size();j++){
                 auto match = joint_state_handles_[i].get_name().compare(msg->name[j])==0;
                 if(match){
                     pos_[i] = msg->position[j];
-                    break;
                 }
-            }
+            } */
         }
         // RCLCPP_INFO(node_->get_logger(), "Pos 0 set to: %f", (double)(pos_[0]));
     }
@@ -158,16 +164,16 @@ void MyRobotHardware::joint_state_subscription_callback(sensor_msgs::msg::JointS
         }
         for (size_t i = 0; i < vel_min_size; i++)
         {
-            for(size_t j = 0;j<msg->name.size();j++){
+            vel_[i] = msg->velocity[i];
+            /*             for(size_t j = 0;j<msg->name.size();j++){
                 auto match = joint_state_handles_[i].get_name().compare(msg->name[j])==0;
                 if(match){
                     vel_[i] = msg->velocity[j];
-                    break;
                 }
-            }
+            } */
         }
     }
-/*     // Update effort states
+    /*     // Update effort states
     {
         auto eff_size = msg->effort.size();
         auto eff_min_size = std::min(eff_size, pos_.size());
@@ -206,12 +212,22 @@ hardware_interface::hardware_interface_ret_t MyRobotHardware::write()
     // RCLCPP_INFO(node_->get_logger(), "Write called");
     // for(size_t i = 0;i<joint_names_.size();i++){
     auto msg = ros2_control_interfaces::msg::JointCommands();
-    for(auto &cmd : joint_command_handles_){
-        msg.joint_names.push_back(cmd.get_name());
-        msg.commands.push_back(cmd.get_cmd());
+    msg.joint_names.resize(joint_command_handles_.size());
+    msg.commands.resize(joint_command_handles_.size());
+    for (size_t i = 0; i < joint_command_handles_.size(); i++)
+    {
+        auto cmd = joint_command_handles_[i];
+        auto name = cmd.get_name();
+        auto command = cmd.get_cmd();
+        // if (command > 5)
+        // {
+        //     RCLCPP_ERROR(node_->get_logger(), "Command for joint %s exceeded 5", name.c_str());
+        // }
+        msg.joint_names[i] = name;
+        msg.commands[i] = command;
     }
     cmd_publisher_->publish(msg);
-        // RCLCPP_INFO(node_->get_logger(), "Publishing msg...");
+    // RCLCPP_INFO(node_->get_logger(), "Publishing msg...");
     // }
     return 0;
 }
